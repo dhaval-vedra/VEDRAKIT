@@ -1,0 +1,68 @@
+<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Vedrakit — dependency-light Python APIs</title>
+  <desc id="desc">An animated dark blue and cyan Vedrakit framework banner.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1200" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07111F"/>
+      <stop offset="0.55" stop-color="#0A1E35"/>
+      <stop offset="1" stop-color="#06101D"/>
+    </linearGradient>
+    <linearGradient id="wordmark" x1="210" y1="95" x2="760" y2="260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B8F7FF"/>
+      <stop offset="0.5" stop-color="#5BDCF4"/>
+      <stop offset="1" stop-color="#6E8CFF"/>
+      <animate attributeName="x1" values="210;310;210" dur="7s" repeatCount="indefinite"/>
+      <animate attributeName="x2" values="760;650;760" dur="7s" repeatCount="indefinite"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#63E6FF"/>
+      <stop offset="1" stop-color="#7C6CFF"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M42 0H0V42" stroke="#8CDFFF" stroke-opacity="0.07"/>
+    </pattern>
+    <clipPath id="round">
+      <rect width="1200" height="360" rx="28"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    <rect width="1200" height="360" fill="url(#background)"/>
+    <rect width="1200" height="360" fill="url(#grid)"/>
+    <circle cx="1020" cy="35" r="230" fill="#3CC8FF" fill-opacity="0.07" filter="url(#glow)"/>
+    <circle cx="1020" cy="35" r="170" stroke="#59E1FF" stroke-opacity="0.15"/>
+    <circle cx="1020" cy="35" r="112" stroke="#7C6CFF" stroke-opacity="0.2" stroke-dasharray="5 12">
+      <animateTransform attributeName="transform" type="rotate" from="0 1020 35" to="360 1020 35" dur="22s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="112" cy="330" r="180" fill="#6E8CFF" fill-opacity="0.07" filter="url(#glow)"/>
+    <path d="M790 0L1200 410" stroke="#63E6FF" stroke-opacity="0.16" stroke-width="2"/>
+    <path d="M895 -40L1240 305" stroke="#7C6CFF" stroke-opacity="0.12" stroke-width="1"/>
+    <circle cx="1018" cy="35" r="6" fill="#63E6FF" filter="url(#glow)">
+      <animate attributeName="r" values="5;9;5" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+    <g opacity="0.9">
+      <rect x="78" y="74" width="74" height="74" rx="20" fill="#102F4B" stroke="#63E6FF" stroke-opacity="0.7"/>
+      <path d="M98 101L115 118L98 135M133 101L116 118L133 135" stroke="url(#accent)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="115" cy="118" r="4" fill="#E3FCFF"/>
+    </g>
+    <text x="190" y="157" fill="url(#wordmark)" font-family="Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="76" font-weight="800" letter-spacing="-3">VEDRAKIT</text>
+    <text x="195" y="204" fill="#B8D2E7" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" letter-spacing="4">BUILD SMALL. SHIP CLEAR.</text>
+    <path d="M196 237H765" stroke="url(#accent)" stroke-width="2" stroke-linecap="round">
+      <animate attributeName="x2" values="430;765;430" dur="6s" repeatCount="indefinite"/>
+    </path>
+    <text x="196" y="281" fill="#8EABC4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">dependency-light Python web framework</text>
+    <g transform="translate(890 210)">
+      <rect width="224" height="94" rx="16" fill="#09192B" stroke="#4DD7F2" stroke-opacity="0.38"/>
+      <text x="22" y="30" fill="#67E5FA" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">$ vedrakit</text>
+      <text x="22" y="56" fill="#D7F7FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">route → validate</text>
+      <text x="22" y="78" fill="#9DADFF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">secure → observe</text>
+      <circle cx="205" cy="22" r="4" fill="#63E6FF">
+        <animate attributeName="opacity" values="1;0.25;1" dur="1.6s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+  </g>
+  <rect x="1" y="1" width="1198" height="358" rx="27" stroke="#6BDFFF" stroke-opacity="0.2" stroke-width="2"/>
+</svg>
