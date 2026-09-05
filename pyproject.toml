@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vedrakit"
+version = "1.0.0"
+description = "A dependency-light Python web framework with routing, validation, auth, tasks, docs, and observability."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Vedrakit contributors"}]
+
+[project.optional-dependencies]
+redis = ["redis>=5.0"]
+graphql = ["graphene>=3.3"]
+websocket = ["websockets>=12.0"]
+grpc = ["grpcio>=1.60"]
+postgresql = ["psycopg[binary]>=3.2"]
+all = [
+    "redis>=5.0",
+    "graphene>=3.3",
+    "websockets>=12.0",
+    "grpcio>=1.60",
+    "psycopg[binary]>=3.2",
+]
+
+[tool.setuptools.packages.find]
+include = ["vedrakit*"]
