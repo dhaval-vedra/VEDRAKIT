@@ -1,3 +1,15 @@
+<div align="center">
+  <a href="https://github.com/dhaval-vedra/VEDRAKIT">
+    <img src="assets/vedrakit-banner.svg" alt="Vedrakit — dependency-light Python web framework" width="100%">
+  </a>
+  <p><strong>Build small. Ship clear.</strong></p>
+  <p>
+    <a href="https://github.com/dhaval-vedra/VEDRAKIT">Repository</a>
+    · <a href="docs/API.md">Complete API reference</a>
+    · <a href="examples/basic_app.py">Runnable example</a>
+  </p>
+</div>
+
 # Vedrakit
 
 Vedrakit is a small, dependency-light Python web framework for building HTTP
@@ -5,6 +17,14 @@ APIs without hiding the runtime behind a large stack. It started as a
 FastAPI-like prototype and is now organized as a reusable package with
 production-oriented defaults, isolated `App` instances, automated tests, and
 optional integrations.
+
+> **Documentation:** This README is the product overview and quick-start guide.
+> For the complete public API, signatures, behavior tables, and integration
+> examples, read [docs/API.md](docs/API.md).
+
+<div align="center">
+  <sub>Animated SVG banner · standard-library core · SQLite + PostgreSQL · OpenAPI · JWT · metrics</sub>
+</div>
 
 The framework keeps the original prototype's feature surface:
 
