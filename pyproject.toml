@@ -4,12 +4,35 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vedrakit"
-version = "1.0.0"
+version = "1.1.0"
 description = "A dependency-light Python web framework with routing, validation, auth, tasks, docs, and observability."
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
 authors = [{name = "Vedrakit contributors"}]
+keywords = ["web", "framework", "api", "http", "jwt", "sqlite", "postgresql"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: WSGI",
+]
+dependencies = []
+
+[project.scripts]
+vedrakit = "vedrakit.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dhaval-vedra/VEDRAKIT"
+Documentation = "https://github.com/dhaval-vedra/VEDRAKIT/blob/main/docs/API.md"
+Repository = "https://github.com/dhaval-vedra/VEDRAKIT"
+Issues = "https://github.com/dhaval-vedra/VEDRAKIT/issues"
 
 [project.optional-dependencies]
 redis = ["redis>=5.0"]
