@@ -5,6 +5,8 @@ original prototype while adding an application object for isolated tests and
 multiple services.
 """
 
+__version__ = "1.1.0"
+
 from .core import (
     ACTIVE_REQUESTS,
     AdvancedMiniFlask,
@@ -57,6 +59,7 @@ from .core import (
     graphql_schemas,
     websocket_endpoint,
 )
+from .codegen import generate_typescript_client, generate_typescript_client_file
 
 __all__ = [
     "ACTIVE_REQUESTS",
@@ -109,4 +112,7 @@ __all__ = [
     "websocket_handlers",
     "graphql_schemas",
     "websocket_endpoint",
+    "generate_typescript_client",
+    "generate_typescript_client_file",
+    "__version__",
 ]
