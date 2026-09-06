@@ -12,6 +12,9 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
 
+# The same install provides the CLI
+vedrakit --help
+
 # Optional adapters
 python -m pip install -e ".[postgresql]"
 python -m pip install -e ".[redis]"
@@ -19,6 +22,19 @@ python -m pip install -e ".[graphql]"
 python -m pip install -e ".[websocket]"
 python -m pip install -e ".[grpc]"
 ```
+
+The installation also provides a dependency-free CLI:
+
+```bash
+vedrakit new inventory-api
+vedrakit dev app:app
+vedrakit routes app:app
+vedrakit openapi app:app --output openapi.json
+vedrakit client app:app --output api-client.ts
+```
+
+Targets use `module:attribute` syntax. `vedrakit new` creates an application,
+tests, package metadata, environment template, and README.
 
 ## Public exports
 
@@ -33,15 +49,17 @@ The public symbols are re-exported from `vedrakit`:
 | Persistence | `Database`, `Migration`, `Model` |
 | Runtime | `TaskQueue`, `background_task`, `cache`, `RedisManager` |
 | Operations | `generate_latest`, `run_metrics_server`, `configure_logging` |
+| Code generation | `generate_typescript_client`, `generate_typescript_client_file` |
 | Optional services | `websocket_endpoint`, `WebSocketManager`, `run_websocket_server`, `graphql_schema`, `run_grpc_server` |
 
 ## Application and routing
 
-### `App(static_dir="static")`
+### `App(static_dir="static", title="Vedrakit API", version="1.1.0", description="", servers=None)`
 
 Creates an isolated application object. Use an `App` instance for production
 services and tests. Every instance owns its routes, middleware, exception
-handlers, static directory, and OpenAPI document.
+handlers, static directory, and OpenAPI document. `title`, `version`,
+`description`, and `servers` populate the OpenAPI `info` and `servers` fields.
 
 ```python
 from vedrakit import App
@@ -49,10 +67,12 @@ from vedrakit import App
 app = App(static_dir="public")
 ```
 
-### `App.route(path, methods, response_model=None, require_auth=False, required_roles=None)`
+### `App.route(path, methods, response_model=None, require_auth=False, required_roles=None, summary=None, description=None, tags=None, operation_id=None, deprecated=False, response_description="Successful response")`
 
 Registers a route. `methods` accepts `GET`, `POST`, `PUT`, `PATCH`, and
-`DELETE`. Path parameters use `{name}` syntax.
+`DELETE`. Path parameters use `{name}` syntax. Metadata arguments enrich the
+generated OpenAPI operation without changing request handling. `App.get`,
+`App.post`, `App.put`, `App.patch`, and `App.delete` are convenience wrappers.
 
 ```python
 from vedrakit import App, Role
@@ -438,6 +458,71 @@ metrics_server = run_metrics_server(port=9090)
 ```
 
 Metrics include request count, active requests, and request duration.
+
+### OpenAPI metadata
+
+`App.openapi()` returns an OpenAPI 3.0.3 document. Application metadata is
+configured when the app is created:
+
+```python
+app = App(
+    title="Inventory API",
+    version="2.0.0",
+    description="Manage inventory items.",
+    servers=[{"url": "https://api.example.com"}],
+)
+```
+
+Route metadata is available on `App.route` and the `App.get`, `App.post`,
+`App.put`, `App.patch`, and `App.delete` shortcuts:
+
+```python
+@app.get(
+    "/items/{item_id}",
+    summary="Read an item",
+    tags=["items"],
+    operation_id="getItem",
+    deprecated=False,
+    response_description="The requested item",
+)
+def get_item(item_id: int):
+    """Return one item by ID."""
+    return {"id": item_id}
+```
+
+The generator documents nested models, lists, unions, enums, dictionaries,
+defaults, query descriptions, response schemas, JWT bearer security, and
+required roles. Query markers support `description`, `example`, and
+`required`:
+
+```python
+limit: int = Query(
+    default=20,
+    description="Maximum number of records",
+    example=10,
+)
+```
+
+### TypeScript client generation
+
+Generate a fetch-based typed client from an app or from any OpenAPI mapping:
+
+```bash
+vedrakit client examples.complete_app:app --output todos-client.ts
+```
+
+Or use the Python API:
+
+```python
+from vedrakit import generate_typescript_client
+
+typescript_source = generate_typescript_client(app.openapi())
+```
+
+The output includes TypeScript interfaces for component schemas, typed
+operation methods, path/query serialization, JSON request bodies, and an
+`ApiError` class. It has no runtime dependency beyond the platform `fetch`
+implementation.
 
 ## Optional integrations
 
