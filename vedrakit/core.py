@@ -16,10 +16,11 @@ import secrets
 import sqlite3
 import threading
 import time
+import types
 import urllib.parse
 from concurrent import futures
 from contextlib import contextmanager
-from dataclasses import dataclass, is_dataclass, asdict
+from dataclasses import dataclass, field, is_dataclass, asdict
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import wraps
@@ -527,17 +528,22 @@ class Param:
     default: Any = None
     required: bool = True
     param_type: ParamTypes = ParamTypes.QUERY
+    description: str = ""
+    example: Any = None
 
 
 @dataclass
 class Query:
     default: Any = None
     description: str = ""
+    required: Optional[bool] = None
+    example: Any = None
 
 
 @dataclass
 class Path:
     description: str = ""
+    example: Any = None
 
 
 class Role(Enum):
@@ -928,17 +934,35 @@ def extract_params(func: Callable[..., Any], route_path: str) -> List[Param]:
         type_hint = hints.get(name, str)
         default = parameter.default
         required = default is inspect.Parameter.empty
+        description = ""
+        example = None
         if name in path_names:
             location = ParamTypes.PATH
+            if isinstance(default, Path):
+                description = default.description
+                example = default.example
+                default = None
+                required = True
+            elif default is inspect.Parameter.empty:
+                default = None
         elif inspect.isclass(type_hint) and issubclass(type_hint, BaseModel):
             location = ParamTypes.BODY
         elif isinstance(default, Query):
+            marker = default
             location = ParamTypes.QUERY
-            default = default.default
-            required = default is None and parameter.default.default is None
+            default = marker.default
+            description = marker.description
+            example = marker.example
+            required = marker.required if marker.required is not None else False
+        elif isinstance(default, Path):
+            location = ParamTypes.QUERY
+            description = default.description
+            example = default.example
+            default = None
+            required = False
         else:
             location = ParamTypes.QUERY
-        params.append(Param(name, type_hint, default, required, location))
+        params.append(Param(name, type_hint, default, required, location, description, example))
     return params
 
 
@@ -951,14 +975,32 @@ class Route:
     require_auth: bool
     required_roles: List[Role]
     params: List[Param]
+    summary: str = ""
+    description: str = ""
+    tags: List[str] = field(default_factory=list)
+    operation_id: str = ""
+    deprecated: bool = False
+    response_description: str = "Successful response"
+    response_type: Any = None
 
 
 class App:
-    def __init__(self, static_dir: str = "static"):
+    def __init__(
+        self,
+        static_dir: str = "static",
+        title: str = "Vedrakit API",
+        version: str = "1.1.0",
+        description: str = "",
+        servers: Optional[List[Dict[str, Any]]] = None,
+    ):
         self.routes: Dict[tuple[str, tuple[str, ...]], Route] = {}
         self.middlewares: List[Callable[[Any], bool]] = []
         self.exception_handlers: Dict[Type[Exception], Callable[[Exception], Any]] = {}
         self.static_dir = static_dir
+        self.title = title
+        self.version = version
+        self.description = description
+        self.servers = list(servers or [])
         self.websocket_handlers = websocket_handlers
         self.graphql_schemas = graphql_schemas
 
@@ -969,6 +1011,12 @@ class App:
         response_model: Optional[Type[Any]] = None,
         require_auth: bool = False,
         required_roles: Optional[List[Role]] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        operation_id: Optional[str] = None,
+        deprecated: bool = False,
+        response_description: str = "Successful response",
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             normalized = path if path.startswith("/") else "/" + path
@@ -977,6 +1025,13 @@ class App:
             declared_role = getattr(func, "required_role", None)
             if declared_role is not None and declared_role not in roles:
                 roles.append(declared_role)
+            docstring = inspect.getdoc(func) or ""
+            doc_lines = docstring.splitlines()
+            annotations = {}
+            try:
+                annotations = get_type_hints(func)
+            except (NameError, TypeError):
+                annotations = {}
             self.routes[(normalized, method_tuple)] = Route(
                 normalized,
                 method_tuple,
@@ -985,10 +1040,32 @@ class App:
                 require_auth,
                 roles,
                 extract_params(func, normalized),
+                summary or (doc_lines[0] if doc_lines else func.__name__),
+                description if description is not None else docstring,
+                list(tags or []),
+                operation_id or f"{func.__name__}_{'_'.join(method.lower() for method in method_tuple)}",
+                deprecated,
+                response_description,
+                annotations.get("return"),
             )
             return func
 
         return decorator
+
+    def get(self, path: str, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(path, ["GET"], **metadata)
+
+    def post(self, path: str, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(path, ["POST"], **metadata)
+
+    def put(self, path: str, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(path, ["PUT"], **metadata)
+
+    def patch(self, path: str, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(path, ["PATCH"], **metadata)
+
+    def delete(self, path: str, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        return self.route(path, ["DELETE"], **metadata)
 
     def middleware(self, func: Callable[[Any], bool]) -> Callable[[Any], bool]:
         self.middlewares.append(func)
@@ -1133,17 +1210,47 @@ class App:
     def openapi(self) -> Dict[str, Any]:
         document: Dict[str, Any] = {
             "openapi": "3.0.3",
-            "info": {"title": "Vedrakit API", "version": "1.0.0"},
+            "info": {
+                "title": self.title,
+                "version": self.version,
+                **({"description": self.description} if self.description else {}),
+            },
             "paths": {},
-            "components": {"schemas": {}},
+            "components": {
+                "schemas": {},
+                "securitySchemes": {
+                    "bearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer",
+                        "bearerFormat": "JWT",
+                    }
+                },
+            },
         }
+        if self.servers:
+            document["servers"] = self.servers
         for route in self.routes.values():
             path_data = document["paths"].setdefault(route.path, {})
             for method in route.methods:
+                operation_id = route.operation_id
+                if operation_id in {
+                    operation.get("operationId")
+                    for path_item in document["paths"].values()
+                    for operation in path_item.values()
+                    if isinstance(operation, dict) and "operationId" in operation
+                }:
+                    operation_id = f"{operation_id}_{method.lower()}"
                 operation: Dict[str, Any] = {
-                    "summary": inspect.getdoc(route.func) or "",
-                    "responses": {"200": {"description": "Successful response"}},
+                    "operationId": operation_id,
+                    "summary": route.summary,
+                    "responses": {"200": {"description": route.response_description}},
                 }
+                if route.description and route.description != route.summary:
+                    operation["description"] = route.description
+                if route.tags:
+                    operation["tags"] = route.tags
+                if route.deprecated:
+                    operation["deprecated"] = True
                 parameters = []
                 body_model = None
                 for param in route.params:
@@ -1155,19 +1262,50 @@ class App:
                                 "name": param.name,
                                 "in": param.param_type.value,
                                 "required": param.required,
-                                "schema": {"type": _openapi_type(param.type)},
+                                "schema": _openapi_schema(param.type),
                             }
                         )
+                        if param.description:
+                            parameters[-1]["description"] = param.description
+                        if param.default is not None and param.default is not inspect.Parameter.empty:
+                            parameters[-1]["schema"]["default"] = param.default
+                        if param.example is not None:
+                            parameters[-1]["example"] = param.example
                 if parameters:
                     operation["parameters"] = parameters
                 if body_model:
                     operation["requestBody"] = {
-                        "required": True,
-                        "content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{body_model.__name__}"}}},
+                        "required": next(
+                            parameter.required
+                            for parameter in route.params
+                            if parameter.param_type == ParamTypes.BODY
+                        ),
+                        "content": {
+                            "application/json": {
+                                "schema": _openapi_schema(body_model),
+                            }
+                        },
                     }
-                    document["components"]["schemas"][body_model.__name__] = _model_schema(body_model)
-                if route.response_model and inspect.isclass(route.response_model) and issubclass(route.response_model, BaseModel):
-                    document["components"]["schemas"][route.response_model.__name__] = _model_schema(route.response_model)
+                _collect_model_schemas(document["components"]["schemas"], body_model)
+                response_type = route.response_model or route.response_type
+                if response_type and response_type is not inspect.Signature.empty:
+                    operation["responses"]["200"]["content"] = {
+                        "application/json": {"schema": _openapi_schema(response_type)}
+                    }
+                    _collect_model_schemas(document["components"]["schemas"], response_type)
+                if route.require_auth:
+                    operation["security"] = [{"bearerAuth": []}]
+                    operation["responses"].setdefault(
+                        "401", {"description": "Authentication required"}
+                    )
+                if route.required_roles:
+                    operation["x-vedrakit-required-roles"] = [
+                        role.value if isinstance(role, Role) else str(role)
+                        for role in route.required_roles
+                    ]
+                    operation["responses"].setdefault(
+                        "403", {"description": "Insufficient permissions"}
+                    )
                 path_data[method.lower()] = operation
         return document
 
@@ -1243,21 +1381,100 @@ class App:
             RedisManager.close_connection()
 
 
-def _openapi_type(type_hint: Any) -> str:
+def _openapi_schema(type_hint: Any) -> Dict[str, Any]:
+    """Translate common Python annotations into OpenAPI 3 schemas."""
+    if type_hint in (inspect.Signature.empty, Any):
+        return {}
+    if type_hint is None or type_hint is type(None):
+        return {"nullable": True}
     origin = get_origin(type_hint)
-    if origin is Union:
-        type_hint = next((arg for arg in get_args(type_hint) if arg is not type(None)), str)
-    return {int: "integer", float: "number", bool: "boolean", bytes: "string"}.get(type_hint, "string")
+    args = get_args(type_hint)
+    if origin in (Union, types.UnionType):
+        non_null = [arg for arg in args if arg is not type(None)]
+        nullable = len(non_null) != len(args)
+        if len(non_null) == 1:
+            schema = _openapi_schema(non_null[0])
+            if nullable:
+                schema["nullable"] = True
+            return schema
+        schema = {"oneOf": [_openapi_schema(arg) for arg in non_null]}
+        if nullable:
+            schema["nullable"] = True
+        return schema
+    if origin in (list, List, tuple, set):
+        return {
+            "type": "array",
+            "items": _openapi_schema(args[0] if args else Any),
+        }
+    if origin is dict or type_hint is dict:
+        return {
+            "type": "object",
+            "additionalProperties": _openapi_schema(args[1] if len(args) > 1 else Any),
+        }
+    if inspect.isclass(type_hint) and issubclass(type_hint, BaseModel):
+        return {"$ref": f"#/components/schemas/{type_hint.__name__}"}
+    if inspect.isclass(type_hint) and issubclass(type_hint, Enum):
+        values = [member.value for member in type_hint]
+        primitive = "integer" if values and all(isinstance(value, int) for value in values) else "string"
+        return {"type": primitive, "enum": values}
+    if type_hint is datetime:
+        return {"type": "string", "format": "date-time"}
+    if type_hint is bytes:
+        return {"type": "string", "format": "byte"}
+    primitive_types = {
+        str: {"type": "string"},
+        int: {"type": "integer"},
+        float: {"type": "number"},
+        bool: {"type": "boolean"},
+    }
+    return dict(primitive_types.get(type_hint, {}))
+
+
+def _collect_model_schemas(
+    schemas: Dict[str, Dict[str, Any]],
+    type_hint: Any,
+    visiting: Optional[set[str]] = None,
+) -> None:
+    """Collect BaseModel schemas recursively without requiring a schema registry."""
+    if type_hint in (None, inspect.Signature.empty, Any):
+        return
+    visiting = visiting or set()
+    origin = get_origin(type_hint)
+    if origin in (Union, types.UnionType):
+        for argument in get_args(type_hint):
+            _collect_model_schemas(schemas, argument, visiting)
+        return
+    if origin in (list, List, tuple, set, dict):
+        for argument in get_args(type_hint):
+            _collect_model_schemas(schemas, argument, visiting)
+        return
+    if not inspect.isclass(type_hint) or not issubclass(type_hint, BaseModel):
+        return
+    name = type_hint.__name__
+    if name in schemas or name in visiting:
+        return
+    visiting.add(name)
+    fields = _annotation_fields(type_hint)
+    properties: Dict[str, Any] = {}
+    for field_name, field_type in fields.items():
+        properties[field_name] = _openapi_schema(field_type)
+        _collect_model_schemas(schemas, field_type, visiting)
+        if hasattr(type_hint, field_name):
+            default = getattr(type_hint, field_name)
+            if default is not None and isinstance(default, (str, int, float, bool, list, dict)):
+                properties[field_name]["default"] = default
+    schema: Dict[str, Any] = {"type": "object", "properties": properties}
+    required = [field_name for field_name in fields if not hasattr(type_hint, field_name)]
+    if required:
+        schema["required"] = required
+    schemas[name] = schema
+    visiting.remove(name)
 
 
 def _model_schema(model: Type[Any]) -> Dict[str, Any]:
-    fields = _annotation_fields(model)
-    required = [name for name in fields if not hasattr(model, name)]
-    return {
-        "type": "object",
-        "properties": {name: {"type": _openapi_type(type_hint)} for name, type_hint in fields.items()},
-        "required": required,
-    }
+    schemas: Dict[str, Dict[str, Any]] = {}
+    _collect_model_schemas(schemas, model)
+    return schemas.get(model.__name__, {"type": "object"})
 
 
 class RequestHandler(http.server.BaseHTTPRequestHandler):
@@ -1435,24 +1652,48 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def route(path: str, methods: List[str], response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    return app.route(path, methods, response_model, require_auth, required_roles)
+def route(
+    path: str,
+    methods: List[str],
+    response_model: Optional[Type[Any]] = None,
+    require_auth: bool = False,
+    required_roles: Optional[List[Role]] = None,
+    summary: Optional[str] = None,
+    description: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    operation_id: Optional[str] = None,
+    deprecated: bool = False,
+    response_description: str = "Successful response",
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    return app.route(
+        path,
+        methods,
+        response_model,
+        require_auth,
+        required_roles,
+        summary,
+        description,
+        tags,
+        operation_id,
+        deprecated,
+        response_description,
+    )
 
 
-def get(path: str, response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    return route(path, ["GET"], response_model, require_auth, required_roles)
+def get(path: str, response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    return route(path, ["GET"], response_model, require_auth, required_roles, **metadata)
 
 
-def post(path: str, response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    return route(path, ["POST"], response_model, require_auth, required_roles)
+def post(path: str, response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    return route(path, ["POST"], response_model, require_auth, required_roles, **metadata)
 
 
-def put(path: str, response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    return route(path, ["PUT"], response_model, require_auth, required_roles)
+def put(path: str, response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    return route(path, ["PUT"], response_model, require_auth, required_roles, **metadata)
 
 
-def delete(path: str, response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    return route(path, ["DELETE"], response_model, require_auth, required_roles)
+def delete(path: str, response_model: Optional[Type[Any]] = None, require_auth: bool = False, required_roles: Optional[List[Role]] = None, **metadata: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    return route(path, ["DELETE"], response_model, require_auth, required_roles, **metadata)
 
 
 def middleware(func: Callable[[Any], bool]) -> Callable[[Any], bool]:
