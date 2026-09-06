@@ -37,6 +37,8 @@ The framework keeps the original prototype's feature surface:
 - Redis-backed cache/rate limiting with a safe in-memory fallback
 - Static files with path traversal protection
 - OpenAPI JSON at `/docs`
+- `vedrakit` CLI for scaffolding, development, route inspection, OpenAPI export,
+  and typed TypeScript client generation
 - Health and readiness endpoints
 - Prometheus-compatible metrics at `/metrics`
 - Optional WebSocket, GraphQL, and gRPC support
@@ -64,6 +66,12 @@ For local development and the included tests:
 ```bash
 pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
+```
+
+The package installs a dependency-free CLI:
+
+```bash
+vedrakit --help
 ```
 
 ## Quick start
@@ -106,6 +114,31 @@ Then visit:
 - `GET /ready` — database readiness
 - `GET /docs` — generated OpenAPI 3.0.3 document
 - `GET /metrics` — Prometheus-compatible metrics
+
+## CLI and project scaffolding
+
+Create a complete starter project with an application, tests, metadata,
+environment template, and README:
+
+```bash
+vedrakit new inventory-api
+cd inventory-api
+python -m pip install -e .
+vedrakit dev app:app
+```
+
+Useful commands:
+
+```bash
+vedrakit routes app:app
+vedrakit openapi app:app --output openapi.json
+vedrakit client app:app --output api-client.ts
+```
+
+The `dev` command accepts `--host`, `--port`, and `--production`. Targets use
+the `module:attribute` format, so a file target such as `app.py:app` also works.
+The generated TypeScript client uses the browser `fetch` API and has no runtime
+dependency.
 
 ## Application objects and decorators
 
@@ -422,16 +455,79 @@ authorization headers are involved. HTTP responses also include
 
 ## OpenAPI documentation
 
-`GET /docs` returns an OpenAPI 3.0.3 JSON document generated from registered
-routes. It includes:
+`GET /docs` and `vedrakit openapi` return an OpenAPI 3.0.3 JSON document
+generated from registered routes. Configure application metadata:
+
+```python
+app = App(
+    title="Inventory API",
+    version="2.0.0",
+    description="Manage inventory items.",
+    servers=[{"url": "https://api.example.com"}],
+)
+```
+
+The document includes:
 
 - Route methods and summaries from docstrings
-- Path and query parameters
-- JSON request bodies for `BaseModel` inputs
+- Stable operation IDs, tags, descriptions, and deprecation flags
+- Path and query parameters with types, defaults, descriptions, and examples
+- Nested JSON request/response schemas for `BaseModel`, lists, unions, enums,
+  dictionaries, and common primitive types
+- JWT bearer security requirements and role metadata for protected routes
 - Model schemas and required fields
+
+Routes can override generated metadata:
+
+```python
+@app.get(
+    "/items/{item_id}",
+    summary="Read an item",
+    tags=["items"],
+    operation_id="getItem",
+    response_description="The requested item",
+)
+def get_item(item_id: int):
+    """Return one item by ID."""
+    return {"id": item_id}
+```
 
 The document is intentionally returned as JSON so it can be consumed by
 Swagger UI, Redoc, code generators, or an API gateway.
+
+## Typed client generation
+
+Generate a TypeScript client from the same OpenAPI document:
+
+```bash
+vedrakit client examples.complete_app:app --output examples/todos-client.ts
+```
+
+The output contains typed interfaces for model schemas, one method per
+operation, path/query serialization, JSON request bodies, and an `ApiError`
+class:
+
+```typescript
+import { createApiClient } from "./todos-client";
+
+const api = createApiClient({ baseUrl: "http://127.0.0.1:8080" });
+const response = await api.listTodos({ limit: 10 });
+```
+
+The generator is also available as a Python API:
+
+```python
+from vedrakit import generate_typescript_client
+
+typescript = generate_typescript_client(app.openapi())
+```
+
+## Complete examples
+
+`examples/basic_app.py` demonstrates the smallest validated API.
+`examples/complete_app.py` demonstrates a dependency-free CRUD API with
+request/response models, path and query parameters, correct status codes,
+OpenAPI tags, and client generation commands.
 
 ## GraphQL, WebSocket, and gRPC
 
@@ -544,13 +640,49 @@ fallback, and task workers.
 ```text
 vedrakit/
   __init__.py       Public API
+  __main__.py       `python -m vedrakit` entry point
+  cli.py            CLI and project scaffolding
+  codegen.py        Typed client generators
   core.py           Runtime implementation
 examples/
   basic_app.py      Runnable example
+  complete_app.py   Complete CRUD example
 tests/
-  test_vedrakit.py End-to-end unit tests
+  test_vedrakit.py End-to-end runtime coverage
+  test_tooling.py   CLI, OpenAPI, and client generator coverage
 pyproject.toml      Package metadata and optional extras
 ```
+
+## Releasing to PyPI
+
+Releases are published automatically by GitHub Actions when a strict
+`vMAJOR.MINOR.PATCH` tag matches the version in `pyproject.toml`.
+
+Before the first automated release, configure a PyPI Trusted Publisher for this
+GitHub repository:
+
+1. Open the Vedrakit project on PyPI and add a **GitHub** trusted publisher.
+2. Set the owner to `dhaval-vedra`, the repository to `VEDRAKIT`, and the
+   workflow filename to `publish.yml`.
+3. Leave the environment blank unless the workflow is later updated to use a
+   GitHub deployment environment.
+
+To publish a future version, update the project version, run the test suite,
+commit the change, and push the matching tag:
+
+```bash
+# pyproject.toml: [project] version = "1.1.0"
+python -m unittest discover -s tests -v
+git add pyproject.toml
+git commit -m "Release v1.1.0"
+git tag v1.1.0
+git push origin main v1.1.0
+```
+
+The workflow checks that the tag and package metadata agree, builds both a
+wheel and source distribution, validates their metadata, and publishes through
+PyPI's OIDC trusted-publishing flow. Build output stays in the ignored `dist/`
+directory and is never committed.
 
 ## License
 
